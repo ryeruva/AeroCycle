@@ -1,119 +1,84 @@
 # AeroCycle - Bike Computer Mirror
 
-AeroCycle is a real-time cycling telemetry mirroring system. It allows you to keep your expensive smartphone safe, dry, and cool inside your pocket or frame bag (acting as a **Pocket Sensor Hub**), while streaming live GPS telemetry (speed, location, path, distance, average speed, elevation) over WebSockets to a secondary/older smartphone, tablet, or e-reader mounted on your handlebars (acting as the **Handlebar Dashboard**).
+AeroCycle is a lightweight, zero-install, real-time cycling telemetry mirroring system. It allows you to place your primary phone (iPhone) safely, dryly, and coolly in your pocket or frame bag while streaming live GPS telemetry directly to an old Android phone, tablet, or e-ink web browser mounted on your handlebars.
 
 ---
 
-## 🚲 Architecture & Features
+## Key Features
 
+- **Sunlight-Readable Dashboard**: Glassmorphic widgets displaying speed, distance, average speed, elapsed time, and elevation using the high-contrast **Orbitron** font.
+- **Integrated Leaflet Map**: A live dark-mode map plotting your current route breadcrumbs.
+- **Resilient Connectivity**: A custom auto-reconnecting WebSocket client wrapper designed to survive cellular stutters on the road.
+- **Bidirectional Remote Control**: Tap "Start", "Pause", or "Reset" directly from the handlebars screen to control the GPS recording on the iPhone in your pocket.
+- **Screen Wake Lock**: A built-in toggle using the Web Wake Lock API to prevent the handlebars display from going to sleep.
+- **Day/Night Theme Toggle**: Instant, high-contrast day mode or battery-saving dark mode.
+- **Zero-Dependency Pairing**: Pairing works completely offline using a local QR code library.
+
+---
+
+## 100% Offline Road-Testing Guide (Android Termux)
+
+This setup runs the entire Node.js server directly on your handlebar-mounted Android phone. **It requires zero internet connection, zero cell data, and zero laptops while riding.**
+
+Because modern mobile browsers restrict Geolocation and Wake Lock APIs to secure contexts, the server runs in **HTTPS mode** using a self-signed SSL certificate.
+
+### Step 1: Install Termux & Node.js on the Android Phone
+1. Download and install **Termux** on your old Android phone.
+   * *Note: Do not use the version on the Google Play Store (it is outdated). Download it from [F-Droid](https://f-droid.org/packages/com.termux/) or directly from the [Termux Github Releases](https://github.com/termux/termux-app/releases).*
+2. Open Termux and run:
+   ```bash
+   pkg update
+   pkg install nodejs openssl-tool git
+   ```
+
+### Step 2: Clone the Project in Termux
+Navigate to your directory and clone the repository:
+```bash
+git clone https://github.com/ryeruva/AeroCycle.git ~/AeroCycle
+cd ~/AeroCycle
 ```
-[ Pocket Sensor Hub ]  -- WebSocket (Live GPS Telemetry) -->  [ Handlebar Dashboard ]
-(Pocket Phone)                                               (Handlebar Device)
-                                                             * Live Map Tracking
-                                                             * Large Speedometer
-                                                             * Metrics & Controls
+
+### Step 3: Generate the Self-Signed SSL Certificate
+Generate the SSL credentials in the project root:
+```bash
+openssl req -subj '/CN=localhost' -x509 -newkey rsa:4096 -nodes -keyout key.pem -out cert.pem -days 365
 ```
+*Note: The AeroCycle server automatically checks for `key.pem` and `cert.pem` on boot. Once found, it runs in **secure HTTPS mode**.*
 
-- **Safety First:** Keep your primary phone safe from vibration, crashes, sun-glare, overheating, and rain.
-- **WebSocket Streaming:** Ultra-low latency, bidirectional messaging. Start, pause, or reset the ride from either screen.
-- **Interactive Map:** The handlebar display utilizes Leaflet.js to plot your real-time path and position.
-- **Wake Lock support:** Keep your handlebar screen awake without it dimming or sleeping during long rides.
-- **Responsive Web UI:** Tailored day/night modes, large legible typography, and beautiful modern interfaces.
-
----
-
-## 📋 Requirements
-
-- **Node.js** (v16.0.0 or higher)
-- **Local Network Connection:** Both devices must be connected to the same local Wi-Fi network (or the server must be exposed to the internet via tunnels like `ngrok`).
-- **Secure Context (HTTPS):** Modern mobile browsers (iOS Safari, Chrome, etc.) **require a secure context (HTTPS or localhost)** to allow access to the browser's Geolocation (GPS) API. Running the server with SSL/TLS certificates is highly recommended.
-
----
-
-## 🚀 Quick Start Guide
-
-### 1. Install Dependencies
-Clone this repository to your computer/server and install the Node.js packages:
+### Step 4: Install Dependencies & Run the Server
+Install the packages and start the server:
 ```bash
 npm install
+node server.js
 ```
+You should see:
+`SSL certificates found. Running in HTTPS mode.`
 
-### 2. Configure SSL/HTTPS (Recommended)
-Since your Pocket Sensor Hub needs GPS access, it must connect to the server securely. AeroCycle automatically enables HTTPS if it detects `key.pem` and `cert.pem` in the root folder.
+### Step 5: Configure the Hotspot & Connect
+1. Turn on the **Portable Wi-Fi Hotspot** in the settings of your Android phone.
+2. Turn on Wi-Fi on your iPhone and connect it to the Android phone's Wi-Fi hotspot.
+   *(The server will automatically detect the hotspot local gateway IP—typically `192.168.43.1`).*
 
-Generate self-signed certificates using `openssl`:
-```bash
-openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout key.pem -out cert.pem
-```
-*(When prompted, you can press Enter to skip/default the certificate metadata fields).*
-
-### 3. Run the Server
-Start the Express and WebSocket server:
-```bash
-npm start
-```
-
-Once started, the console will print your local network IP (e.g., `192.168.1.15`). 
-- **HTTP Mode URL:** `http://192.168.1.15:3000`
-- **HTTPS Mode URL:** `https://192.168.1.15:3000`
+### Step 6: Open and Pair
+1. On the handlebar-mounted Android phone, open Chrome and navigate to:
+   `https://localhost:3000`
+2. **Bypass the SSL Warning**: Click **Advanced** -> **Proceed to localhost (unsafe)**.
+3. Select **Handlebar Display**. You will see your 4-digit code and a QR code.
+   *(The QR code automatically points to the local network IP: `https://192.168.43.1:3000/sender.html?session=XXXX`).*
+4. On your iPhone, open the Camera app and scan the QR code.
+5. **Bypass the SSL Warning on iPhone**: Tap **Show Details** -> **Visit this website** (or **Proceed / Trust Certificate**).
+6. Grant Location Access to allow GPS tracking, slip the iPhone into your pocket, and enjoy the ride!
 
 ---
 
-## 📱 How to Use (Step-by-Step)
+## Local Testing (Quick Verification)
 
-1. **Mount & Open Handlebar Dashboard:**
-   - Mount your secondary display device (tablet, old phone, laptop) to your handlebars.
-   - Open the browser on it and navigate to `https://<YOUR-SERVER-IP>:3000`.
-   - Click **Handlebar Display**.
-   - The screen will show a **4-digit pairing code** and a **QR Code**.
-
-2. **Connect Pocket Sensor Hub:**
-   - On your primary phone (in your pocket/bag), open the camera app and scan the **QR Code** from the handlebar screen, OR manually navigate to the server homepage and click **Pocket Sensor Hub** to type the **4-digit code**.
-   - Make sure to **allow Location/GPS permissions** when prompted by your mobile browser.
-
-3. **Start Riding!**
-   - Once paired, the Dashboard on your handlebars will automatically transition into the live ride layout.
-   - Tap **Start Ride** (on either device) to start tracking. Your speed, duration, distance, and live path will mirror in real-time.
-   - Tap **Pause** or **Reset** to control your session.
-
----
-
-## 💡 Troubleshooting & Mobile GPS Access
-
-### I get "GPS Error: User denied Geolocation" or nothing updates
-Modern browsers enforce strict security rules around the Geolocation API. If you load the app over plain `http://<IP-address>:3000` on your mobile phone, the browser will block GPS access.
-
-**Solutions:**
-1. **Enable HTTPS (Recommended):** Follow the SSL/HTTPS setup guide above to run the server securely. When visiting `https://...`, your browser will ask you to bypass the self-signed certificate warning (usually under *Advanced -> Proceed anyway*). Once bypassed, GPS will work.
-2. **Chrome Local IP Workaround (Android):**
-   - Open Chrome on your pocket phone.
-   - Navigate to `chrome://flags/#unsafely-treat-insecure-origin-as-secure`.
-   - Enable this flag and add your server's IP/port (e.g., `http://192.168.1.15:3000`).
-   - Relaunch Chrome.
-3. **Use ngrok:**
-   - Expose your local port via ngrok to get a free public HTTPS URL:
-     ```bash
-     ngrok http 3000
-     ```
-   - Connect both devices to the public HTTPS URL provided by ngrok.
-
----
-
-## 🛠️ Project Structure
-
-```
-├── public/
-│   ├── css/
-│   │   └── style.css       # Premium responsive dashboard stylesheet
-│   ├── js/
-│   │   ├── common.js       # Reconnect WS handler, conversions, and theme support
-│   │   ├── qrcode.min.js   # QR code generation utility for pairing
-│   │   ├── receiver.js     # Handlebar Dashboard UI & map plotting logic
-│   │   └── sender.js       # Pocket Phone GPS & sensor logging logic
-│   ├── index.html          # Device selection homepage
-│   ├── receiver.html       # Handlebar Dashboard display page
-│   └── sender.html         # Pocket Phone sender controller page
-├── package.json            # Node.js manifest
-├── server.js               # Node.js HTTPS/HTTP & WebSocket server
-└── README.md               # You are here!
-```
+To test the application locally on a computer:
+1. Start the server:
+   ```bash
+   node server.js
+   ```
+2. Open `http://localhost:3000` in a browser. Select **Handlebar Display** to get a 4-digit code.
+3. Open another browser tab at `http://localhost:3000`. Select **Pocket Sensor Hub**, enter the code, and click **Connect**.
+4. Click **Start Ride** (on either screen) and grant location access.
+5. *(Optional)* Press `F12` to open developer tools, go to **Sensors**, select a mock location pathway, and verify that the map and speed gauges update in real-time.
