@@ -52,6 +52,49 @@
           <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Duration</div>
           <div style="font-family: var(--font-family-mono); font-weight: 700; font-size: 1.2rem; margin-top: 0.3rem;" id="live-duration">00:00:00</div>
         </div>
+        <div style="background: rgba(255,255,255,0.02); padding: 0.8rem; border-radius: 12px; border: 1px solid var(--panel-border);">
+          <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;"><i class="fa-solid fa-heart" style="color: var(--accent-red);"></i> HR</div>
+          <div style="font-family: var(--font-family-mono); font-weight: 700; font-size: 1.2rem; margin-top: 0.3rem;" id="live-heart-rate">--- bpm</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.02); padding: 0.8rem; border-radius: 12px; border: 1px solid var(--panel-border);">
+          <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;"><i class="fa-solid fa-person-biking" style="color: var(--accent-cyan);"></i> Cadence</div>
+          <div style="font-family: var(--font-family-mono); font-weight: 700; font-size: 1.2rem; margin-top: 0.3rem;" id="live-cadence">--- rpm</div>
+        </div>
+      </div>
+
+      <!-- Simulation Mode Row -->
+      <div class="sim-mode-row">
+        <div class="sim-mode-info">
+          <h3><i class="fa-solid fa-wand-magic-sparkles"></i> Simulation Mode</h3>
+          <p>Mock GPS, HR & Cadence tracking</p>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="sim-mode-toggle">
+          <span class="slider round"></span>
+        </label>
+      </div>
+
+      <!-- Bluetooth Sensors Panel -->
+      <div class="sensors-panel-group">
+        <h3><i class="fa-solid fa-bluetooth"></i> Bluetooth Sensors</h3>
+        
+        <!-- Heart Rate -->
+        <div class="sensor-row">
+          <div class="sensor-info">
+            <span class="sensor-name">Heart Rate Monitor</span>
+            <span class="sensor-status disconnected" id="hr-status"><i class="fa-solid fa-circle"></i> Disconnected</span>
+          </div>
+          <button class="btn-ble-connect disconnected" id="btn-connect-hr">Connect</button>
+        </div>
+
+        <!-- Speed & Cadence -->
+        <div class="sensor-row">
+          <div class="sensor-info">
+            <span class="sensor-name">Cadence Sensor</span>
+            <span class="sensor-status disconnected" id="cadence-status"><i class="fa-solid fa-circle"></i> Disconnected</span>
+          </div>
+          <button class="btn-ble-connect disconnected" id="btn-connect-cadence">Connect</button>
+        </div>
       </div>
 
       <!-- Controls -->

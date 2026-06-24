@@ -12,6 +12,9 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Parse JSON request body
+app.use(express.json());
+
 // Dynamic HTTP/HTTPS server setup
 let server;
 let isHttps = false;
@@ -69,9 +72,73 @@ function getLocalIp() {
 // HTTP API to request a new session ID
 app.get('/api/session/new', (req, res) => {
   const sessionId = generateSessionId();
-  sessions.set(sessionId, { senders: new Set(), receivers: new Set() });
+  sessions.set(sessionId, { senders: new Set(), receivers: new Set(), cachedExternal: {}, lastTelemetry: null });
   console.log(`Created new session: ${sessionId}`);
   res.json({ sessionId, localIp: getLocalIp() });
+});
+
+// HTTP API to push external telemetry (e.g. Apple Watch Heart Rate, Cadence)
+app.post('/api/session/:sessionId/external', (req, res) => {
+  const { sessionId } = req.params;
+  const externalData = req.body;
+  
+  if (!sessions.has(sessionId)) {
+    // Dynamically initialize the session if it doesn't exist yet
+    sessions.set(sessionId, { senders: new Set(), receivers: new Set(), cachedExternal: {}, lastTelemetry: null });
+  }
+
+  const session = sessions.get(sessionId);
+  
+  // Cache the new external values
+  if (!session.cachedExternal) {
+    session.cachedExternal = {};
+  }
+  Object.assign(session.cachedExternal, externalData);
+  
+  console.log(`[API External] Session ${sessionId} cached metrics:`, session.cachedExternal);
+
+  // If we have a last telemetry state from the sender, merge it and broadcast immediately
+  if (session.lastTelemetry) {
+    Object.assign(session.lastTelemetry, externalData);
+    const broadcastData = JSON.stringify({
+      type: 'telemetry',
+      data: session.lastTelemetry,
+      timestamp: Date.now()
+    });
+    session.receivers.forEach((receiverWs) => {
+      if (receiverWs.readyState === WebSocket.OPEN) {
+        receiverWs.send(broadcastData);
+      }
+    });
+  } else {
+    // If no sender has transmitted telemetry yet, broadcast the external packet as-is
+    const broadcastData = JSON.stringify({
+      type: 'telemetry',
+      data: {
+        speed: externalData.speed !== undefined ? externalData.speed : null,
+        distance: externalData.distance !== undefined ? externalData.distance : null,
+        duration: externalData.duration !== undefined ? externalData.duration : null,
+        avgSpeed: externalData.avgSpeed !== undefined ? externalData.avgSpeed : null,
+        elevation: externalData.elevation !== undefined ? externalData.elevation : null,
+        accuracy: externalData.accuracy !== undefined ? externalData.accuracy : null,
+        lat: externalData.lat !== undefined ? externalData.lat : null,
+        lng: externalData.lng !== undefined ? externalData.lng : null,
+        status: externalData.status !== undefined ? externalData.status : 'recording',
+        path: externalData.path !== undefined ? externalData.path : [],
+        heartRate: externalData.heartRate !== undefined ? externalData.heartRate : null,
+        cadence: externalData.cadence !== undefined ? externalData.cadence : null,
+        isExternal: true
+      },
+      timestamp: Date.now()
+    });
+    session.receivers.forEach((receiverWs) => {
+      if (receiverWs.readyState === WebSocket.OPEN) {
+        receiverWs.send(broadcastData);
+      }
+    });
+  }
+
+  res.json({ success: true, cached: session.cachedExternal });
 });
 
 // WebSocket connection handler
@@ -95,7 +162,7 @@ wss.on('connection', (ws) => {
           
           // Ensure session exists
           if (!sessions.has(sessionId)) {
-            sessions.set(sessionId, { senders: new Set(), receivers: new Set() });
+            sessions.set(sessionId, { senders: new Set(), receivers: new Set(), cachedExternal: {}, lastTelemetry: null });
           }
 
           const session = sessions.get(sessionId);
@@ -118,6 +185,19 @@ wss.on('connection', (ws) => {
           if (currentSessionId && currentRole === 'sender') {
             const activeSession = sessions.get(currentSessionId);
             if (activeSession) {
+              // Store latest telemetry from the primary sender
+              activeSession.lastTelemetry = message.data;
+
+              // Merge cached external inputs (e.g. Apple Watch Heart Rate) if primary sender hasn't read them locally
+              if (activeSession.cachedExternal) {
+                if (message.data.heartRate === null || message.data.heartRate === undefined) {
+                  message.data.heartRate = activeSession.cachedExternal.heartRate;
+                }
+                if (message.data.cadence === null || message.data.cadence === undefined) {
+                  message.data.cadence = activeSession.cachedExternal.cadence;
+                }
+              }
+
               const broadcastData = JSON.stringify({
                 type: 'telemetry',
                 data: message.data,

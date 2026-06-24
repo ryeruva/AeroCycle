@@ -17,6 +17,17 @@ let lastGpsCoords = null; // { lat, lng, timestamp }
 let watchId = null;
 let timerInterval = null;
 
+// Heart Rate and Cadence Sensors
+let currentHeartRate = null;
+let currentCadence = null;
+let isSimMode = false;
+let simRouteIndex = 0;
+
+let bleHrDevice = null;
+let bleHrChar = null;
+let bleCadenceDevice = null;
+let bleCadenceChar = null;
+
 // UI Elements
 const statusCircle = document.getElementById('status-circle');
 const statusIcon = document.getElementById('status-icon');
@@ -28,6 +39,14 @@ const liveDistance = document.getElementById('live-distance');
 const liveDuration = document.getElementById('live-duration');
 const consoleLog = document.getElementById('console-log');
 const speedUnitLbl = document.getElementById('speed-unit-lbl');
+
+const liveHeartRate = document.getElementById('live-heart-rate');
+const liveCadence = document.getElementById('live-cadence');
+const simModeToggle = document.getElementById('sim-mode-toggle');
+const hrStatus = document.getElementById('hr-status');
+const btnConnectHr = document.getElementById('btn-connect-hr');
+const cadenceStatus = document.getElementById('cadence-status');
+const btnConnectCadence = document.getElementById('btn-connect-cadence');
 
 // Initialize Session
 if (!sessionId) {
@@ -95,6 +114,252 @@ function connectWebSocket() {
   );
   
   socket.connect();
+}
+
+// Simulation Position Generator
+function getSimulatedPosition(index) {
+  // Center of Central Park: 40.785091, -73.968285
+  const centerLat = 40.785091;
+  const centerLng = -73.968285;
+  const radius = 0.005; // elliptical loop
+  const angle = (index * 0.015) % (2 * Math.PI);
+  const lat = centerLat + radius * Math.cos(angle);
+  const lng = centerLng + radius * Math.sin(angle) * 0.75;
+  return { lat, lng };
+}
+
+// Workout Simulation Step
+function runSimulationStep() {
+  simRouteIndex++;
+  const pos = getSimulatedPosition(simRouteIndex);
+  
+  // Simulated speed (averaging ~22 km/h with variability)
+  currentSpeedMps = 5.2 + Math.sin(simRouteIndex * 0.06) * 2.2 + Math.random() * 0.4;
+  
+  // Simulated heart rate (matches effort/speed)
+  if (!bleHrDevice) {
+    const baseHr = 135;
+    const speedEffortFactor = (currentSpeedMps - 5) * 6;
+    currentHeartRate = Math.round(baseHr + speedEffortFactor + Math.sin(simRouteIndex * 0.04) * 8 + Math.random() * 2);
+    currentHeartRate = Math.max(90, Math.min(185, currentHeartRate));
+  }
+  
+  // Simulated cadence (normal cycling range 78-92 rpm)
+  if (!bleCadenceDevice) {
+    currentCadence = Math.round(84 + Math.cos(simRouteIndex * 0.05) * 5 + Math.random() * 1.5);
+  }
+  
+  currentElevationM = Math.round(42 + Math.sin(simRouteIndex * 0.012) * 15);
+  currentAccuracyM = 3.2; // premium GPS signal simulation
+
+  const latitude = pos.lat;
+  const longitude = pos.lng;
+  const now = Date.now();
+
+  if (lastGpsCoords) {
+    const stepDistance = calculateDistance(
+      lastGpsCoords.lat, 
+      lastGpsCoords.lng, 
+      latitude, 
+      longitude
+    );
+    // Accumulate simulated distance
+    totalDistanceMeters += stepDistance;
+    pathCoordinates.push([latitude, longitude]);
+  } else {
+    // Start of path
+    pathCoordinates.push([latitude, longitude]);
+  }
+  
+  lastGpsCoords = { lat: latitude, lng: longitude, timestamp: now };
+  
+  // Periodic console log to avoid scrolling spam
+  if (simRouteIndex % 5 === 0) {
+    logSystem(`[Sim] GPS: Lat ${latitude.toFixed(5)}, Lng ${longitude.toFixed(5)}, Speed ${Units.formatSpeed(currentSpeedMps)} ${Units.speedLabel()}, HR: ${currentHeartRate} bpm, Cadence: ${currentCadence} rpm`);
+  }
+}
+
+// Web Bluetooth HRM pairing
+async function connectHeartRate() {
+  if (bleHrDevice) {
+    disconnectHr();
+    return;
+  }
+
+  if (!navigator.bluetooth) {
+    logSystem("Error: Web Bluetooth API not supported in this browser.");
+    alert("Web Bluetooth is not supported in this browser. Try Chrome on Android/Desktop, or Bluefy on iOS.");
+    return;
+  }
+
+  logSystem("Searching for Bluetooth Heart Rate Monitor...");
+  hrStatus.className = "sensor-status scanning";
+  hrStatus.innerHTML = '<i class="fa-solid fa-circle"></i> Scanning...';
+  
+  try {
+    bleHrDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ services: ['heart_rate'] }]
+    });
+    
+    logSystem(`HRM Found: ${bleHrDevice.name}. Connecting...`);
+    bleHrDevice.addEventListener('gattserverdisconnected', onHrDisconnected);
+    
+    const server = await bleHrDevice.gatt.connect();
+    const service = await server.getPrimaryService('heart_rate');
+    bleHrChar = await service.getCharacteristic('heart_rate_measurement');
+    
+    await bleHrChar.startNotifications();
+    bleHrChar.addEventListener('characteristicvaluechanged', handleHrMeasurement);
+    
+    hrStatus.className = "sensor-status connected";
+    hrStatus.innerHTML = `<i class="fa-solid fa-circle"></i> Connected (${bleHrDevice.name})`;
+    btnConnectHr.className = "btn-ble-connect connected";
+    btnConnectHr.textContent = "Disconnect";
+    logSystem("Heart Rate Monitor connected successfully.");
+  } catch (err) {
+    logSystem(`HRM Error: ${err.message}`);
+    disconnectHr();
+  }
+}
+
+function handleHrMeasurement(event) {
+  const value = event.target.value;
+  const flags = value.getUint8(0);
+  const rate16 = flags & 0x01;
+  let hrValue;
+  if (rate16) {
+    hrValue = value.getUint16(1, true);
+  } else {
+    hrValue = value.getUint8(1);
+  }
+  currentHeartRate = hrValue;
+  updateUI();
+  sendTelemetry();
+}
+
+function disconnectHr() {
+  if (bleHrChar) {
+    try { bleHrChar.stopNotifications(); } catch(e){}
+    bleHrChar = null;
+  }
+  if (bleHrDevice && bleHrDevice.gatt.connected) {
+    bleHrDevice.gatt.disconnect();
+  }
+  bleHrDevice = null;
+  onHrDisconnected();
+}
+
+function onHrDisconnected() {
+  hrStatus.className = "sensor-status disconnected";
+  hrStatus.innerHTML = '<i class="fa-solid fa-circle"></i> Disconnected';
+  btnConnectHr.className = "btn-ble-connect disconnected";
+  btnConnectHr.textContent = "Connect";
+  currentHeartRate = null;
+  updateUI();
+  logSystem("Heart Rate Monitor disconnected.");
+}
+
+// Web Bluetooth Cadence pairing
+let lastCrankRevolutions = 0;
+let lastCrankTime = 0;
+
+async function connectCadence() {
+  if (bleCadenceDevice) {
+    disconnectCadence();
+    return;
+  }
+
+  if (!navigator.bluetooth) {
+    logSystem("Error: Web Bluetooth API not supported in this browser.");
+    alert("Web Bluetooth is not supported in this browser. Try Chrome on Android/Desktop, or Bluefy on iOS.");
+    return;
+  }
+
+  logSystem("Searching for Bluetooth Speed & Cadence Sensor...");
+  cadenceStatus.className = "sensor-status scanning";
+  cadenceStatus.innerHTML = '<i class="fa-solid fa-circle"></i> Scanning...';
+  
+  try {
+    bleCadenceDevice = await navigator.bluetooth.requestDevice({
+      filters: [{ services: ['cycling_speed_and_cadence'] }]
+    });
+    
+    logSystem(`Cadence Found: ${bleCadenceDevice.name}. Connecting...`);
+    bleCadenceDevice.addEventListener('gattserverdisconnected', onCadenceDisconnected);
+    
+    const server = await bleCadenceDevice.gatt.connect();
+    const service = await server.getPrimaryService('cycling_speed_and_cadence');
+    bleCadenceChar = await service.getCharacteristic('csc_measurement');
+    
+    await bleCadenceChar.startNotifications();
+    bleCadenceChar.addEventListener('characteristicvaluechanged', handleCadenceMeasurement);
+    
+    cadenceStatus.className = "sensor-status connected";
+    cadenceStatus.innerHTML = `<i class="fa-solid fa-circle"></i> Connected (${bleCadenceDevice.name})`;
+    btnConnectCadence.className = "btn-ble-connect connected";
+    btnConnectCadence.textContent = "Disconnect";
+    logSystem("Cadence sensor connected successfully.");
+  } catch (err) {
+    logSystem(`Cadence Error: ${err.message}`);
+    disconnectCadence();
+  }
+}
+
+function handleCadenceMeasurement(event) {
+  const value = event.target.value;
+  const flags = value.getUint8(0);
+  let index = 1;
+  
+  // Skip wheel revolutions if present (wheel = 6 bytes)
+  if (flags & 0x01) {
+    index += 6;
+  }
+  
+  // Cadence crank revolutions
+  if (flags & 0x02) {
+    const crankRevolutions = value.getUint16(index, true);
+    const crankTime = value.getUint16(index + 2, true); // 1/1024s unit
+    
+    if (lastCrankTime > 0 && crankTime !== lastCrankTime) {
+      let revDiff = crankRevolutions - lastCrankRevolutions;
+      if (revDiff < 0) revDiff += 65536; // rollover
+      
+      let timeDiff = (crankTime - lastCrankTime) / 1024;
+      if (timeDiff < 0) timeDiff += 64; // rollover
+      
+      if (timeDiff > 0) {
+        currentCadence = Math.round((revDiff / timeDiff) * 60);
+      }
+    }
+    lastCrankRevolutions = crankRevolutions;
+    lastCrankTime = crankTime;
+    updateUI();
+    sendTelemetry();
+  }
+}
+
+function disconnectCadence() {
+  if (bleCadenceChar) {
+    try { bleCadenceChar.stopNotifications(); } catch(e){}
+    bleCadenceChar = null;
+  }
+  if (bleCadenceDevice && bleCadenceDevice.gatt.connected) {
+    bleCadenceDevice.gatt.disconnect();
+  }
+  bleCadenceDevice = null;
+  onCadenceDisconnected();
+}
+
+function onCadenceDisconnected() {
+  cadenceStatus.className = "sensor-status disconnected";
+  cadenceStatus.innerHTML = '<i class="fa-solid fa-circle"></i> Disconnected';
+  btnConnectCadence.className = "btn-ble-connect disconnected";
+  btnConnectCadence.textContent = "Connect";
+  currentCadence = null;
+  lastCrankRevolutions = 0;
+  lastCrankTime = 0;
+  updateUI();
+  logSystem("Cadence sensor disconnected.");
 }
 
 // GPS Tracking Logic
@@ -191,9 +456,15 @@ function startTimer() {
   timerInterval = setInterval(() => {
     if (rideState === 'recording') {
       elapsedSeconds++;
+      
+      if (isSimMode) {
+        runSimulationStep();
+      }
+      
       if (elapsedSeconds > 0) {
         averageSpeedMps = totalDistanceMeters / elapsedSeconds;
       }
+      
       updateUI();
       // Send telemetry updates every second even if GPS hasn't fired to keep display timer ticking
       sendTelemetry();
@@ -224,7 +495,9 @@ function sendTelemetry() {
       lat: lastGpsCoords ? lastGpsCoords.lat : null,
       lng: lastGpsCoords ? lastGpsCoords.lng : null,
       status: rideState,
-      path: pathCoordinates
+      path: pathCoordinates,
+      heartRate: currentHeartRate,
+      cadence: currentCadence
     }
   });
 }
@@ -243,8 +516,15 @@ function startRide() {
   statusText.textContent = "Recording";
   btnPause.disabled = false;
   btnPause.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+  
+  if (simModeToggle) simModeToggle.disabled = true;
 
-  startGpsTracking();
+  if (isSimMode) {
+    logSystem("Workout Simulation active. GPS bypass active.");
+    runSimulationStep();
+  } else {
+    startGpsTracking();
+  }
   startTimer();
   sendTelemetry();
   
@@ -289,6 +569,10 @@ function resetRide() {
   currentElevationM = null;
   pathCoordinates = [];
   lastGpsCoords = null;
+  simRouteIndex = 0;
+  
+  if (!bleHrDevice) currentHeartRate = null;
+  if (!bleCadenceDevice) currentCadence = null;
 
   // UI reset
   statusCircle.className = "sender-status-circle";
@@ -297,6 +581,8 @@ function resetRide() {
   statusText.textContent = "Start Ride";
   btnPause.disabled = true;
   btnPause.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+  
+  if (simModeToggle) simModeToggle.disabled = false;
 
   stopTimer();
   stopGpsTracking();
@@ -328,7 +614,15 @@ function handleRemoteControl(action) {
       statusText.textContent = "Recording";
       btnPause.disabled = false;
       btnPause.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
-      startGpsTracking();
+      
+      if (simModeToggle) simModeToggle.disabled = true;
+      
+      if (isSimMode) {
+        logSystem("Workout Simulation starting (remote trigger)...");
+        runSimulationStep();
+      } else {
+        startGpsTracking();
+      }
       startTimer();
       updateUI();
     }
@@ -352,6 +646,10 @@ function handleRemoteControl(action) {
     currentElevationM = null;
     pathCoordinates = [];
     lastGpsCoords = null;
+    simRouteIndex = 0;
+    
+    if (!bleHrDevice) currentHeartRate = null;
+    if (!bleCadenceDevice) currentCadence = null;
 
     statusCircle.className = "sender-status-circle";
     statusIcon.className = "fa-solid fa-play";
@@ -359,6 +657,9 @@ function handleRemoteControl(action) {
     statusText.textContent = "Start Ride";
     btnPause.disabled = true;
     btnPause.innerHTML = '<i class="fa-solid fa-pause"></i> Pause';
+    
+    if (simModeToggle) simModeToggle.disabled = false;
+    
     stopTimer();
     stopGpsTracking();
     updateUI();
@@ -371,6 +672,10 @@ function updateUI() {
   speedUnitLbl.textContent = Units.speedLabel();
   liveDistance.textContent = `${Units.formatDistance(totalDistanceMeters)} ${Units.distanceLabel()}`;
   liveDuration.textContent = formatDuration(elapsedSeconds);
+  
+  // Update Bluetooth displays
+  liveHeartRate.textContent = currentHeartRate ? `${currentHeartRate} bpm` : "--- bpm";
+  liveCadence.textContent = currentCadence ? `${currentCadence} rpm` : "--- rpm";
 }
 
 // Button Events
@@ -391,6 +696,16 @@ btnPause.addEventListener('click', () => {
 });
 
 btnReset.addEventListener('click', resetRide);
+
+// Connect Bluetooth device event listeners
+btnConnectHr.addEventListener('click', connectHeartRate);
+btnConnectCadence.addEventListener('click', connectCadence);
+
+// Simulation Toggle change listener
+simModeToggle.addEventListener('change', (e) => {
+  isSimMode = e.target.checked;
+  logSystem(isSimMode ? "Simulation Mode enabled. GPS bypass active." : "Simulation Mode disabled. Using real GPS.");
+});
 
 // Listen to unit settings change if triggerable, keep default units matching common config
 speedUnitLbl.textContent = Units.speedLabel();

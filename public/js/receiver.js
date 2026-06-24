@@ -26,6 +26,9 @@ const dashElevation = document.getElementById('dash-elevation');
 const dashElevationUnit = document.getElementById('dash-elevation-unit');
 const dashGpsAcc = document.getElementById('dash-gps-acc');
 const gpsSignalIcon = document.getElementById('gps-signal-icon');
+const dashHeartRate = document.getElementById('dash-heart-rate');
+const dashHeartIcon = document.getElementById('dash-heart-icon');
+const dashCadence = document.getElementById('dash-cadence');
 
 // Control Buttons
 const btnDashStart = document.getElementById('btn-dash-start');
@@ -187,6 +190,25 @@ function handleTelemetryUpdate(data) {
     dashElevation.textContent = '---';
   }
 
+  // Heart Rate display & animation speed sync
+  if (data.heartRate !== null && data.heartRate !== undefined) {
+    dashHeartRate.textContent = data.heartRate;
+    dashHeartIcon.classList.add('pulse-active');
+    // Set animation duration dynamically (duration of 1 beat = 60 / BPM seconds)
+    const duration = 60 / data.heartRate;
+    dashHeartIcon.style.setProperty('--pulse-duration', `${duration}s`);
+  } else {
+    dashHeartRate.textContent = '---';
+    dashHeartIcon.classList.remove('pulse-active');
+  }
+
+  // Cadence display
+  if (data.cadence !== null && data.cadence !== undefined) {
+    dashCadence.textContent = data.cadence;
+  } else {
+    dashCadence.textContent = '---';
+  }
+
   // GPS Accuracy & Signal Color
   if (data.accuracy !== null && data.accuracy !== undefined) {
     dashGpsAcc.textContent = Math.round(data.accuracy);
@@ -271,6 +293,9 @@ function handleRemoteControl(action) {
     dashDuration.textContent = '00:00:00';
     dashAvgSpeed.textContent = '0.0';
     dashElevation.textContent = '---';
+    dashHeartRate.textContent = '---';
+    dashHeartIcon.classList.remove('pulse-active');
+    dashCadence.textContent = '---';
     dashGpsAcc.textContent = '--';
     
     // Clear map paths (if map was initialized)
