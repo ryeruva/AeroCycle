@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AeroCycle - Bike Computer Mirror</title>
+  <meta name="description" content="Mirror your real-time cycling stats, maps, and sensors from your pocket phone to any handlebar-mounted display.">
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <i class="fa-solid fa-person-biking"></i>
+      AeroCycle <span>Mirror</span>
+    </div>
+    <div style="display: flex; gap: 1rem; align-items: center;">
+      <div class="theme-switch" title="Toggle Day/Night Mode">
+        <i class="fas fa-sun"></i>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="panel intro-panel">
+      <h1>Bike Computer Mirror</h1>
+      <p>
+        Keep your expensive phone safe, dry, and cool in your pocket or frame bag. Stream your GPS telemetry in real-time to an old Android, e-reader, or secondary tablet mounted on your handlebars.
+      </p>
+
+      <div class="choice-grid">
+        <!-- Display Card -->
+        <div class="choice-card receiver" id="btn-select-receiver">
+          <i class="fa-solid fa-desktop"></i>
+          <h2>Handlebar Display</h2>
+          <p>Mount this device on your bike. It displays speed, distance, average speed, and a live map.</p>
+        </div>
+
+        <!-- Sensor Card -->
+        <div class="choice-card sender" id="btn-select-sender">
+          <i class="fa-solid fa-mobile-screen-button"></i>
+          <h2>Pocket Sensor Hub</h2>
+          <p>Put this phone in your pocket. It tracks GPS and orientation, and sends telemetry to the display.</p>
+        </div>
+      </div>
+
+      <!-- Code entry form for Sender -->
+      <div class="code-input-container" id="pairing-section" style="display: none; margin-top: 1.5rem;">
+        <h3>Enter 4-Digit Pairing Code</h3>
+        <p style="font-size: 0.9rem; margin-top: -0.5rem;">Get this code from your Handlebar Display device</p>
+        <input type="tel" maxlength="4" placeholder="••••" class="code-input" id="pairing-code">
+        <div style="display: flex; gap: 1rem; justify-content: center; margin-top: 1rem;">
+          <button class="btn btn-secondary" id="btn-back"><i class="fa-solid fa-arrow-left"></i> Back</button>
+          <button class="btn btn-primary" id="btn-connect-sender">Connect Sensor <i class="fa-solid fa-link"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/common.js"></script>
+  <script>
+    // Initialize theme
+    initTheme();
+
+    const selectReceiver = document.getElementById('btn-select-receiver');
+    const selectSender = document.getElementById('btn-select-sender');
+    const pairingSection = document.getElementById('pairing-section');
+    const choiceGrid = document.querySelector('.choice-grid');
+    const btnBack = document.getElementById('btn-back');
+    const pairingCodeInput = document.getElementById('pairing-code');
+    const btnConnectSender = document.getElementById('btn-connect-sender');
+
+    // Handle display device selection (Receiver)
+    selectReceiver.addEventListener('click', async () => {
+      selectReceiver.style.opacity = '0.5';
+      selectReceiver.style.pointerEvents = 'none';
+      try {
+        const response = await fetch('/api/session/new');
+        const data = await response.json();
+        if (data.sessionId) {
+          window.location.href = `/receiver.html?session=${data.sessionId}&ip=${data.localIp}`;
+        } else {
+          alert('Failed to generate session. Please try again.');
+        }
+      } catch (err) {
+        console.error('Error generating session:', err);
+        alert('Could not connect to the server. Make sure it is running!');
+      } finally {
+        selectReceiver.style.opacity = '1';
+        selectReceiver.style.pointerEvents = 'auto';
+      }
+    });
+
+    // Handle sender device selection (Pocket Phone)
+    selectSender.addEventListener('click', () => {
+      choiceGrid.style.display = 'none';
+      pairingSection.style.display = 'flex';
+      pairingCodeInput.focus();
+    });
+
+    btnBack.addEventListener('click', () => {
+      pairingSection.style.display = 'none';
+      choiceGrid.style.display = 'grid';
+      pairingCodeInput.value = '';
+    });
+
+    // Connect as sender
+    function connectAsSender() {
+      const code = pairingCodeInput.value.trim();
+      if (code.length !== 4 || isNaN(code)) {
+        alert('Please enter a valid 4-digit numeric code.');
+        pairingCodeInput.focus();
+        return;
+      }
+      window.location.href = `/sender.html?session=${code}`;
+    }
+
+    btnConnectSender.addEventListener('click', connectAsSender);
+    pairingCodeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        connectAsSender();
+      }
+    });
+  </script>
+</body>
+</html>

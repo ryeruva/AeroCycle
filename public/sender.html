@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AeroCycle - Sensor Hub</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <i class="fa-solid fa-mobile-screen-button"></i>
+      Sensor <span>Hub</span>
+    </div>
+    <div style="display: flex; gap: 0.8rem; align-items: center;">
+      <div class="session-badge">
+        <div class="badge-dot" id="connection-indicator"></div>
+        <span id="session-display">Session: ----</span>
+      </div>
+      <div class="theme-switch" title="Toggle Day/Night Mode">
+        <i class="fas fa-sun"></i>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="panel sender-panel">
+      <div style="text-align: center;">
+        <h2 style="margin-bottom: 0.25rem;">Active Telemetry Feed</h2>
+        <p style="color: var(--text-secondary); font-size: 0.9rem;">Keep this screen awake or run in background</p>
+      </div>
+
+      <!-- Large Status Indicator -->
+      <div class="sender-status-circle" id="status-circle">
+        <i class="fa-solid fa-play" id="status-icon" style="color: var(--accent-cyan);"></i>
+        <span id="status-text">Start Ride</span>
+      </div>
+
+      <div style="width: 100%; text-align: center; font-family: var(--font-family-mono); font-size: 1.1rem;" id="live-speed-display">
+        Speed: <span style="font-weight: 700; color: var(--accent-neon); font-size: 1.5rem;">0.0</span> <span id="speed-unit-lbl">km/h</span>
+      </div>
+
+      <!-- Quick Metrics Summary -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; width: 100%; gap: 1rem; text-align: center;">
+        <div style="background: rgba(255,255,255,0.02); padding: 0.8rem; border-radius: 12px; border: 1px solid var(--panel-border);">
+          <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Distance</div>
+          <div style="font-family: var(--font-family-mono); font-weight: 700; font-size: 1.2rem; margin-top: 0.3rem;" id="live-distance">0.00 km</div>
+        </div>
+        <div style="background: rgba(255,255,255,0.02); padding: 0.8rem; border-radius: 12px; border: 1px solid var(--panel-border);">
+          <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">Duration</div>
+          <div style="font-family: var(--font-family-mono); font-weight: 700; font-size: 1.2rem; margin-top: 0.3rem;" id="live-duration">00:00:00</div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="sender-controls">
+        <button class="btn btn-secondary" id="btn-pause" disabled>
+          <i class="fa-solid fa-pause"></i> Pause
+        </button>
+        <button class="btn btn-danger" id="btn-reset">
+          <i class="fa-solid fa-rotate-left"></i> Reset
+        </button>
+      </div>
+
+      <!-- Console Log -->
+      <div style="width: 100%; display: flex; flex-direction: column; gap: 0.5rem;">
+        <h4 style="font-size: 0.85rem; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.05em;">System Log</h4>
+        <div class="sender-console" id="console-log">
+          <div class="console-line">Ready to record. Open handlebar screen and pair.</div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 1rem; width: 100%;">
+        <a href="/" class="btn btn-secondary" style="flex: 1;"><i class="fa-solid fa-house"></i> Home</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/common.js"></script>
+  <script src="/js/sender.js"></script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AeroCycle - Display Screen</title>
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/style.css">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+</head>
+<body>
+
+  <header>
+    <div class="logo">
+      <i class="fa-solid fa-desktop"></i>
+      AeroCycle <span>Dashboard</span>
+    </div>
+    
+    <div style="display: flex; gap: 0.8rem; align-items: center;">
+      <!-- Unit Selection -->
+      <div class="unit-toggle" id="unit-toggle">
+        <button class="unit-btn active" data-unit="metric">KM/H</button>
+        <button class="unit-btn" data-unit="imperial">MPH</button>
+      </div>
+
+      <div class="session-badge">
+        <div class="badge-dot" id="connection-indicator"></div>
+        <span id="session-display">Session: ----</span>
+      </div>
+      
+      <div class="theme-switch" title="Toggle Day/Night Mode">
+        <i class="fas fa-sun"></i>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Pairing Screen (Visible when not active) -->
+    <div class="panel" id="pairing-panel" style="text-align: center; max-width: 500px; margin: auto; display: flex; flex-direction: column; gap: 1.5rem;">
+      <h2>Pair Your Sensor Hub</h2>
+      <p style="color: var(--text-secondary);">Scan this QR code or type the 4-digit code on the tracking phone to link devices.</p>
+      
+      <div style="font-size: 3rem; font-family: var(--font-family-mono); font-weight: 900; color: var(--accent-neon); letter-spacing: 0.2rem; margin: 1rem 0;" id="display-pairing-code">
+        ----
+      </div>
+      
+      <div class="qr-container">
+        <div id="qrcode"></div>
+      </div>
+      
+      <p style="font-size: 0.9rem; color: var(--text-secondary);"><i class="fa-solid fa-spinner fa-spin"></i> Waiting for Pocket Sensor Hub to connect...</p>
+      <a href="/" class="btn btn-secondary"><i class="fa-solid fa-house"></i> Back to Home</a>
+    </div>
+
+    <!-- Live Dashboard (Hidden until sender connects) -->
+    <div class="dashboard-grid" id="dashboard-panel" style="display: none;">
+      <!-- Stats Left Side -->
+      <div class="stats-side">
+        <!-- Huge Speed Display -->
+        <div class="panel speed-hero">
+          <div class="speed-value" id="dash-speed">0.0</div>
+          <div class="speed-unit" id="dash-speed-unit">km/h</div>
+          
+          <div style="position: absolute; top: 1rem; right: 1.5rem; display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-secondary);" id="gps-accuracy-container">
+            <i class="fa-solid fa-signal" style="color: var(--accent-green);" id="gps-signal-icon"></i>
+            <span>Acc: <span id="dash-gps-acc">--</span>m</span>
+          </div>
+        </div>
+
+        <!-- Metrics cards -->
+        <div class="metrics-grid">
+          <!-- Distance -->
+          <div class="metric-card">
+            <div class="metric-label">
+              <i class="fa-solid fa-route"></i> Distance
+            </div>
+            <div class="metric-value" id="dash-distance">0.00</div>
+            <div class="metric-sub" id="dash-distance-unit">km</div>
+          </div>
+
+          <!-- Ride Time -->
+          <div class="metric-card">
+            <div class="metric-label">
+              <i class="fa-solid fa-stopwatch"></i> Duration
+            </div>
+            <div class="metric-value" id="dash-duration">00:00:00</div>
+            <div class="metric-sub">Moving Time</div>
+          </div>
+
+          <!-- Average Speed -->
+          <div class="metric-card">
+            <div class="metric-label">
+              <i class="fa-solid fa-gauge-simple-high"></i> Avg Speed
+            </div>
+            <div class="metric-value" id="dash-avg-speed">0.0</div>
+            <div class="metric-sub" id="dash-avg-speed-unit">km/h</div>
+          </div>
+
+          <!-- Elevation -->
+          <div class="metric-card">
+            <div class="metric-label">
+              <i class="fa-solid fa-mountain"></i> Elevation
+            </div>
+            <div class="metric-value" id="dash-elevation">---</div>
+            <div class="metric-sub" id="dash-elevation-unit">m</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map Right Side -->
+      <div class="map-side">
+        <div id="map"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard Controls (Sticky bottom, hidden during pairing) -->
+  <div class="dashboard-controls" id="dashboard-controls" style="display: none;">
+    <!-- Screen Wake Lock Toggle -->
+    <button class="btn btn-secondary wake-lock-status" id="btn-wakelock">
+      <i class="fa-regular fa-lightbulb"></i>
+      <span>Keep Screen On</span>
+    </button>
+
+    <div class="control-buttons-group">
+      <button class="btn btn-primary" id="btn-dash-start">
+        <i class="fa-solid fa-play"></i> Start Ride
+      </button>
+      <button class="btn btn-danger" id="btn-dash-reset">
+        <i class="fa-solid fa-rotate-left"></i> Reset
+      </button>
+    </div>
+  </div>
+
+  <!-- Leaflet Map Library -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- QRCode.js Library (Served Locally) -->
+  <script src="/js/qrcode.min.js"></script>
+  <!-- Shared JS Utilities -->
+  <script src="/js/common.js"></script>
+  <!-- Dashboard JS Core -->
+  <script src="/js/receiver.js"></script>
+</body>
+</html>
